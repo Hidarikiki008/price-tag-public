@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 
 <head>
@@ -1063,11 +1063,11 @@
         </div>
         <div class="form-group">
           <label for="bNumStart">開始番号</label>
-          <input type="number" id="bNumStart" value="1" min="0" max="9999" style="width:100px;">
+          <input type="number" id="bNumStart" value="1" min="0" max="9999" inputmode="numeric" style="width:100px;">
         </div>
         <div class="form-group">
           <label for="bNumCount">生成枚数</label>
-          <input type="number" id="bNumCount" value="200" min="1" max="500" style="width:100px;">
+          <input type="number" id="bNumCount" value="200" min="1" max="500" inputmode="numeric" style="width:100px;">
           <div class="aone-info">💡 シートの面数に合わせると無駄なし（70面 or 200面）</div>
         </div>
         <div class="form-group">
@@ -1604,6 +1604,49 @@
         input.value = next;
       }
       return next;
+    }
+    function bindEditableIntInput(inputId, configKey, limits) {
+      var input = document.getElementById(inputId);
+      if (!input) return;
+      var maxDigits = String(limits.max).length;
+      function commitValue(rawValue) {
+        var fallback = typeof CONFIG[configKey] === 'number' ? CONFIG[configKey] : limits.fallback;
+        var next = sanitizeInt(rawValue, limits.min, limits.max, fallback);
+        CONFIG[configKey] = next;
+        input.value = next;
+        saveSettings();
+        updatePreview();
+      }
+      function selectAllValue() {
+        if (!input.value || typeof input.select !== 'function') return;
+        setTimeout(function () {
+          input.select();
+        }, 0);
+      }
+      input.addEventListener('focus', selectAllValue);
+      input.addEventListener('click', selectAllValue);
+      input.addEventListener('input', function (e) {
+        var digits = normalizeNumericInput(e.target.value).slice(0, maxDigits);
+        if (e.target.value !== digits) {
+          e.target.value = digits;
+        }
+        if (digits === '') {
+          return;
+        }
+        var next = sanitizeInt(digits, limits.min, limits.max, CONFIG[configKey]);
+        CONFIG[configKey] = next;
+        if (digits !== String(next)) {
+          e.target.value = next;
+        }
+        saveSettings();
+        updatePreview();
+      });
+      input.addEventListener('blur', function (e) {
+        commitValue(e.target.value);
+      });
+      input.addEventListener('change', function (e) {
+        commitValue(e.target.value);
+      });
     }
     function sanitizeConfigInPlace() {
       CONFIG.price = normalizeNumericInput(CONFIG.price).slice(0, INPUT_LIMITS.priceDigits);
@@ -2295,20 +2338,8 @@
           btn.classList.add('active'); CONFIG.bNumSeparator = btn.dataset.sep; saveSettings(); updatePreview();
         });
       });
-      document.getElementById('bNumStart').addEventListener('input', function (e) {
-        CONFIG.bNumStart = sanitizeInt(e.target.value, INPUT_LIMITS.bNumStart.min, INPUT_LIMITS.bNumStart.max, INPUT_LIMITS.bNumStart.fallback);
-        if (String(e.target.value) !== String(CONFIG.bNumStart)) {
-          e.target.value = CONFIG.bNumStart;
-        }
-        saveSettings(); updatePreview();
-      });
-      document.getElementById('bNumCount').addEventListener('input', function (e) {
-        CONFIG.bNumCount = sanitizeInt(e.target.value, INPUT_LIMITS.bNumCount.min, INPUT_LIMITS.bNumCount.max, INPUT_LIMITS.bNumCount.fallback);
-        if (String(e.target.value) !== String(CONFIG.bNumCount)) {
-          e.target.value = CONFIG.bNumCount;
-        }
-        saveSettings(); updatePreview();
-      });
+      bindEditableIntInput('bNumStart', 'bNumStart', INPUT_LIMITS.bNumStart);
+      bindEditableIntInput('bNumCount', 'bNumCount', INPUT_LIMITS.bNumCount);
       document.querySelectorAll('#bNumPadButtons .btn-option').forEach(function (btn) {
         btn.addEventListener('click', function () {
           document.querySelectorAll('#bNumPadButtons .btn-option').forEach(function (b) { b.classList.remove('active'); });
