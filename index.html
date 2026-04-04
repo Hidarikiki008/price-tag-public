@@ -1402,7 +1402,7 @@
                 <input type="number" id="aoneOffsetY" min="-2" max="2" step="0.1" value="0">
               </div>
             </div>
-            <div class="aone-info">💡 印刷がズレる場合、ここで0.1mm単位で調整できます</div>
+            <div class="aone-info">💡 まずはテスト印刷だよ。倍率100%・拡大縮小なしで印刷して、ズレたら0.1mm単位で調整できるよ</div>
           </div>
           <div class="form-group">
             <button class="reset-btn" onclick="exportTestPDF()"
@@ -1435,7 +1435,7 @@
         <div class="form-group">
           <label for="bNumCount">生成枚数</label>
           <input type="number" id="bNumCount" value="200" min="1" max="500" inputmode="numeric" style="width:100px;">
-          <div class="aone-info">💡 シートの面数に合わせると無駄なし（70面 or 200面）</div>
+          <div class="aone-info">💡 シートの面数に合わせると無駄なしだよ（70面 or 200面）</div>
         </div>
         <div class="form-group">
           <label>ゼロ埋め桁数</label>
@@ -3854,13 +3854,14 @@
         '<title>', title, '</title>',
         '<style>',
         'html,body{margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}',
+        '@page{size:', paperW, 'mm ', paperH, 'mm;margin:0;}',
         '.print-note{padding:12px 16px;font-size:14px;color:#555;text-align:center;}',
-        '.sheet{width:', paperW, 'mm;min-height:', paperH, 'mm;margin:12px auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.12);page-break-after:always;}',
-        '.sheet:last-child{page-break-after:auto;}',
-        '.sheet img{display:block;width:100%;height:auto;}',
-        '@media print{body{background:#fff;}.print-note{display:none;}.sheet{margin:0;box-shadow:none;}}',
+        '.sheet{width:', paperW, 'mm;height:', paperH, 'mm;min-height:', paperH, 'mm;margin:12px auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.12);overflow:hidden;break-after:page;page-break-after:always;}',
+        '.sheet:last-child{break-after:auto;page-break-after:auto;}',
+        '.sheet img{display:block;width:', paperW, 'mm;height:', paperH, 'mm;}',
+        '@media print{html,body{background:#fff;}.print-note{display:none;}.sheet{margin:0;box-shadow:none;}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}',
         '</style></head><body>',
-        '<div class="print-note">この画面から印刷や共有でPDF保存できるよ。倍率は100%にしてね。</div>'
+        '<div class="print-note">この画面から印刷や共有でPDF保存できるよ。倍率100%・拡大縮小なし・余白なしで印刷してね。</div>'
       ];
       imageUrls.forEach(function (url) {
         html.push('<div class="sheet"><img src="', url, '" alt="print sheet"></div>');
