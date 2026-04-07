@@ -1395,14 +1395,27 @@
             <div class="offset-controls">
               <div class="offset-group">
                 <label for="aoneOffsetX">← 横 →</label>
-                <input type="number" id="aoneOffsetX" min="-2" max="2" step="0.1" value="0">
+                <input type="number" id="aoneOffsetX" min="-5" max="5" step="0.1" value="0">
               </div>
               <div class="offset-group">
                 <label for="aoneOffsetY">↑ 縦 ↓</label>
-                <input type="number" id="aoneOffsetY" min="-2" max="2" step="0.1" value="0">
+                <input type="number" id="aoneOffsetY" min="-5" max="5" step="0.1" value="0">
               </div>
             </div>
-            <div class="aone-info">💡 まずはテスト印刷だよ。倍率100%・拡大縮小なしで印刷して、ズレたら0.1mm単位で調整できるよ</div>
+          </div>
+          <div class="form-group">
+            <label>📏 ピッチ微調整 (mm)</label>
+            <div class="offset-controls">
+              <div class="offset-group">
+                <label for="aonePitchX">列の間隔</label>
+                <input type="number" id="aonePitchX" min="-1" max="1" step="0.1" value="0">
+              </div>
+              <div class="offset-group">
+                <label for="aonePitchY">段の間隔</label>
+                <input type="number" id="aonePitchY" min="-1" max="1" step="0.1" value="0">
+              </div>
+            </div>
+            <div class="aone-info">💡 全体が同じだけズレる時は位置微調整、下や右へ行くほどズレる時はピッチ微調整だよ</div>
           </div>
           <div class="form-group">
             <button class="reset-btn" onclick="exportTestPDF()"
@@ -1469,13 +1482,27 @@
           <div class="offset-controls">
             <div class="offset-group">
               <label for="bNumOffsetX">← 横 →</label>
-              <input type="number" id="bNumOffsetX" min="-2" max="2" step="0.1" value="0">
+              <input type="number" id="bNumOffsetX" min="-5" max="5" step="0.1" value="0">
             </div>
             <div class="offset-group">
               <label for="bNumOffsetY">↑ 縦 ↓</label>
-              <input type="number" id="bNumOffsetY" min="-2" max="2" step="0.1" value="0">
+              <input type="number" id="bNumOffsetY" min="-5" max="5" step="0.1" value="0">
             </div>
           </div>
+        </div>
+        <div class="form-group">
+          <label>📏 ピッチ微調整 (mm)</label>
+          <div class="offset-controls">
+            <div class="offset-group">
+              <label for="bNumPitchX">列の間隔</label>
+              <input type="number" id="bNumPitchX" min="-1" max="1" step="0.1" value="0">
+            </div>
+            <div class="offset-group">
+              <label for="bNumPitchY">段の間隔</label>
+              <input type="number" id="bNumPitchY" min="-1" max="1" step="0.1" value="0">
+            </div>
+          </div>
+          <div class="aone-info">💡 下や右へ行くほどズレる時は、こっちで間隔を少しだけ広げたり詰めたりできるよ</div>
         </div>
         <div class="form-group">
           <button class="reset-btn" onclick="exportTestPDF()"
@@ -1705,6 +1732,8 @@
       aoneGuide: false,
       aoneOffsetX: 0,
       aoneOffsetY: 0,
+      aonePitchX: 0,
+      aonePitchY: 0,
 
       // 管理番号モード
       bNumPrefix: 'B',
@@ -1716,6 +1745,8 @@
       bNumGuide: false,
       bNumOffsetX: 0,
       bNumOffsetY: 0,
+      bNumPitchX: 0,
+      bNumPitchY: 0,
 
       // レイアウト定数 (mm)
       margin: 8,
@@ -1758,6 +1789,60 @@
         paperH: 297
       }
     };
+
+    function getSheetCalibration(mode) {
+      if (mode === 'bnum') {
+        return {
+          offsetX: CONFIG.bNumOffsetX || 0,
+          offsetY: CONFIG.bNumOffsetY || 0,
+          pitchX: CONFIG.bNumPitchX || 0,
+          pitchY: CONFIG.bNumPitchY || 0
+        };
+      }
+      return {
+        offsetX: CONFIG.aoneOffsetX || 0,
+        offsetY: CONFIG.aoneOffsetY || 0,
+        pitchX: CONFIG.aonePitchX || 0,
+        pitchY: CONFIG.aonePitchY || 0
+      };
+    }
+
+    function getAoneLayoutMetrics(preset, scale, calibration) {
+      var safeCalibration = calibration || { offsetX: 0, offsetY: 0, pitchX: 0, pitchY: 0 };
+      var gapXmm = Math.max(0.2, preset.gapX + (safeCalibration.pitchX || 0));
+      var gapYmm = Math.max(0.2, preset.gapY + (safeCalibration.pitchY || 0));
+      return {
+        offsetX: (preset.marginLeft + (safeCalibration.offsetX || 0)) * scale,
+        offsetY: (preset.marginTop + (safeCalibration.offsetY || 0)) * scale,
+        labelW: preset.labelW * scale,
+        labelH: preset.labelH * scale,
+        gapX: gapXmm * scale,
+        gapY: gapYmm * scale,
+        gapXmm: gapXmm,
+        gapYmm: gapYmm,
+        cols: preset.cols,
+        rows: preset.rows
+      };
+    }
+
+    function renderPdfLabelCanvas(labelWmm, labelHmm, dpi, drawCallback) {
+      var scale = dpi / 25.4;
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(labelWmm * scale));
+      canvas.height = Math.max(1, Math.round(labelHmm * scale));
+      var ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return null;
+      }
+      drawCallback(ctx, canvas.width, canvas.height, scale);
+      return canvas;
+    }
+
+    function addPdfPrintNote(pdf, paperW, paperH, text) {
+      pdf.setFontSize(8);
+      pdf.setTextColor(140, 140, 140);
+      pdf.text(text || getPrintFooterText(), paperW / 2, paperH - 10, { align: 'center' });
+    }
 
     // カラーマップ
     var COLORS = {
@@ -1885,6 +1970,7 @@
       pdfDpi: LEGACY_MODE ? 96 : 300,
       imageQuality: LEGACY_MODE ? 0.76 : 0.95
     };
+    var APP_BUILD_LABEL = '2026-04-07-cal-aone';
     var schedulePreviewFrame = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : function (callback) {
       return setTimeout(callback, 16);
     };
@@ -1902,8 +1988,10 @@
       tagHeight: { min: 5, max: 120, fallback: 15 },
       paperWidth: { min: 50, max: 500, fallback: 210 },
       paperHeight: { min: 50, max: 500, fallback: 297 },
-      aoneOffset: { min: -2, max: 2, fallback: 0 },
-      bnumOffset: { min: -2, max: 2, fallback: 0 },
+      aoneOffset: { min: -5, max: 5, fallback: 0 },
+      aonePitch: { min: -1, max: 1, fallback: 0 },
+      bnumOffset: { min: -5, max: 5, fallback: 0 },
+      bnumPitch: { min: -1, max: 1, fallback: 0 },
       bNumStart: { min: 0, max: 9999, fallback: 1 },
       bNumCount: { min: 1, max: 500, fallback: 70 },
       margin: { min: 0, max: 20, fallback: 8 },
@@ -2069,6 +2157,8 @@
       CONFIG.aoneSheet = sanitizeChoice(CONFIG.aoneSheet, ENUM_OPTIONS.aoneSheet, '31555');
       CONFIG.aoneOffsetX = sanitizeFloat(CONFIG.aoneOffsetX, INPUT_LIMITS.aoneOffset.min, INPUT_LIMITS.aoneOffset.max, INPUT_LIMITS.aoneOffset.fallback);
       CONFIG.aoneOffsetY = sanitizeFloat(CONFIG.aoneOffsetY, INPUT_LIMITS.aoneOffset.min, INPUT_LIMITS.aoneOffset.max, INPUT_LIMITS.aoneOffset.fallback);
+      CONFIG.aonePitchX = sanitizeFloat(CONFIG.aonePitchX, INPUT_LIMITS.aonePitch.min, INPUT_LIMITS.aonePitch.max, INPUT_LIMITS.aonePitch.fallback);
+      CONFIG.aonePitchY = sanitizeFloat(CONFIG.aonePitchY, INPUT_LIMITS.aonePitch.min, INPUT_LIMITS.aonePitch.max, INPUT_LIMITS.aonePitch.fallback);
       CONFIG.bNumPrefix = sanitizeTextInput(CONFIG.bNumPrefix, INPUT_LIMITS.bNumPrefixLength) || 'B';
       CONFIG.bNumSeparator = sanitizeChoice(CONFIG.bNumSeparator, ENUM_OPTIONS.bNumSeparator, '-');
       CONFIG.bNumStart = sanitizeInt(CONFIG.bNumStart, INPUT_LIMITS.bNumStart.min, INPUT_LIMITS.bNumStart.max, INPUT_LIMITS.bNumStart.fallback);
@@ -2077,6 +2167,8 @@
       CONFIG.bNumSheet = sanitizeChoice(CONFIG.bNumSheet, ENUM_OPTIONS.bNumSheet, '73200');
       CONFIG.bNumOffsetX = sanitizeFloat(CONFIG.bNumOffsetX, INPUT_LIMITS.bnumOffset.min, INPUT_LIMITS.bnumOffset.max, INPUT_LIMITS.bnumOffset.fallback);
       CONFIG.bNumOffsetY = sanitizeFloat(CONFIG.bNumOffsetY, INPUT_LIMITS.bnumOffset.min, INPUT_LIMITS.bnumOffset.max, INPUT_LIMITS.bnumOffset.fallback);
+      CONFIG.bNumPitchX = sanitizeFloat(CONFIG.bNumPitchX, INPUT_LIMITS.bnumPitch.min, INPUT_LIMITS.bnumPitch.max, INPUT_LIMITS.bnumPitch.fallback);
+      CONFIG.bNumPitchY = sanitizeFloat(CONFIG.bNumPitchY, INPUT_LIMITS.bnumPitch.min, INPUT_LIMITS.bnumPitch.max, INPUT_LIMITS.bnumPitch.fallback);
       CONFIG.margin = sanitizeFloat(CONFIG.margin, INPUT_LIMITS.margin.min, INPUT_LIMITS.margin.max, INPUT_LIMITS.margin.fallback);
       CONFIG.gap = sanitizeInt(CONFIG.gap, INPUT_LIMITS.gap.min, INPUT_LIMITS.gap.max, INPUT_LIMITS.gap.fallback);
       CONFIG.cutLine = sanitizeBool(CONFIG.cutLine, false);
@@ -2928,6 +3020,16 @@
           updatePreview();
         });
       });
+      ['aonePitchX', 'aonePitchY'].forEach(function (id) {
+        document.getElementById(id).addEventListener('input', function (e) {
+          CONFIG[id] = sanitizeFloat(e.target.value, INPUT_LIMITS.aonePitch.min, INPUT_LIMITS.aonePitch.max, INPUT_LIMITS.aonePitch.fallback);
+          if (String(e.target.value) !== String(CONFIG[id])) {
+            e.target.value = CONFIG[id];
+          }
+          saveSettings();
+          updatePreview();
+        });
+      });
 
       // === 管理番号モード ===
       document.getElementById('bNumPrefix').addEventListener('input', function (e) {
@@ -2970,6 +3072,15 @@
       ['bNumOffsetX', 'bNumOffsetY'].forEach(function (id) {
         document.getElementById(id).addEventListener('input', function (e) {
           CONFIG[id] = sanitizeFloat(e.target.value, INPUT_LIMITS.bnumOffset.min, INPUT_LIMITS.bnumOffset.max, INPUT_LIMITS.bnumOffset.fallback);
+          if (String(e.target.value) !== String(CONFIG[id])) {
+            e.target.value = CONFIG[id];
+          }
+          saveSettings(); updatePreview();
+        });
+      });
+      ['bNumPitchX', 'bNumPitchY'].forEach(function (id) {
+        document.getElementById(id).addEventListener('input', function (e) {
+          CONFIG[id] = sanitizeFloat(e.target.value, INPUT_LIMITS.bnumPitch.min, INPUT_LIMITS.bnumPitch.max, INPUT_LIMITS.bnumPitch.fallback);
           if (String(e.target.value) !== String(CONFIG[id])) {
             e.target.value = CONFIG[id];
           }
@@ -3664,16 +3775,15 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // A-ONE固定座標計算
-      var adjX = (CONFIG.aoneOffsetX || 0) * scale;
-      var adjY = (CONFIG.aoneOffsetY || 0) * scale;
-      var offsetX = preset.marginLeft * scale + adjX;
-      var offsetY = preset.marginTop * scale + adjY;
-      var labelW = preset.labelW * scale;
-      var labelH = preset.labelH * scale;
-      var gapX = preset.gapX * scale;
-      var gapY = preset.gapY * scale;
-      var cols = preset.cols;
-      var rows = preset.rows;
+      var metrics = getAoneLayoutMetrics(preset, scale, getSheetCalibration('aone'));
+      var offsetX = metrics.offsetX;
+      var offsetY = metrics.offsetY;
+      var labelW = metrics.labelW;
+      var labelH = metrics.labelH;
+      var gapX = metrics.gapX;
+      var gapY = metrics.gapY;
+      var cols = metrics.cols;
+      var rows = metrics.rows;
 
       // タグを描画
       var count = 0;
@@ -3774,12 +3884,13 @@
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       var nums = generateBNumbers();
-      var offsetX = preset.marginLeft * scale;
-      var offsetY = preset.marginTop * scale;
-      var labelW = preset.labelW * scale;
-      var labelH = preset.labelH * scale;
-      var gapX = preset.gapX * scale;
-      var gapY = preset.gapY * scale;
+      var metrics = getAoneLayoutMetrics(preset, scale, getSheetCalibration('bnum'));
+      var offsetX = metrics.offsetX;
+      var offsetY = metrics.offsetY;
+      var labelW = metrics.labelW;
+      var labelH = metrics.labelH;
+      var gapX = metrics.gapX;
+      var gapY = metrics.gapY;
       var maxLabels = preset.cols * preset.rows;
       var count = 0;
       for (var row = 0; row < preset.rows && count < nums.length; row++) {
@@ -3861,13 +3972,16 @@
         '.sheet img{display:block;width:', paperW, 'mm;height:', paperH, 'mm;}',
         '@media print{html,body{background:#fff;}.print-note{display:none;}.sheet{margin:0;box-shadow:none;}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}',
         '</style></head><body>',
-        '<div class="print-note">この画面から印刷や共有でPDF保存できるよ。倍率100%・拡大縮小なし・余白なしで印刷してね。</div>'
+        '<div class="print-note">この画面から印刷や共有でPDF保存できるよ。倍率100%・拡大縮小なし・余白なしで印刷してね。 / ', APP_BUILD_LABEL, '</div>'
       ];
       imageUrls.forEach(function (url) {
         html.push('<div class="sheet"><img src="', url, '" alt="print sheet"></div>');
       });
       html.push('</body></html>');
       return html.join('');
+    }
+    function getPrintFooterText() {
+      return '※倍率100%（実際のサイズ）で印刷してください / ' + APP_BUILD_LABEL;
     }
     function openPrintFallback(imageUrls, paperW, paperH, title) {
       if (!imageUrls || imageUrls.length === 0) {
@@ -3895,18 +4009,40 @@
       if (nums.length === 0) { alert('生成枚数を1以上にしてください'); return; }
       var paperW = preset.paperW; var paperH = preset.paperH;
       var dpi = PERFORMANCE.pdfDpi; var mmToPx = dpi / 25.4;
-      var canvasW = Math.round(paperW * mmToPx); var canvasH = Math.round(paperH * mmToPx);
-      var scale = mmToPx;
-      var oX = preset.marginLeft * scale; var oY = preset.marginTop * scale;
-      var lW = preset.labelW * scale; var lH = preset.labelH * scale;
-      var gX = preset.gapX * scale; var gY = preset.gapY * scale;
+      var pdfMetrics = getAoneLayoutMetrics(preset, 1, getSheetCalibration('bnum'));
       var labelsPerPage = preset.cols * preset.rows;
       var totalPages = Math.ceil(nums.length / labelsPerPage);
-      var pdf = jsPDF ? new jsPDF({ orientation: 'p', unit: 'mm', format: [paperW, paperH] }) : null;
+      if (jsPDF) {
+        var pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: [paperW, paperH] });
+        var numIdx = 0;
+        for (var page = 0; page < totalPages; page++) {
+          if (page > 0) pdf.addPage([paperW, paperH], 'p');
+          for (var row = 0; row < preset.rows && numIdx < nums.length; row++) {
+            for (var col = 0; col < preset.cols && numIdx < nums.length; col++) {
+              var labelCanvas = renderPdfLabelCanvas(preset.labelW, preset.labelH, dpi, function (ctx, width, height, scale) {
+                drawBNumberTag(ctx, 0, 0, width, height, scale, nums[numIdx]);
+              });
+              if (labelCanvas) {
+                pdf.addImage(labelCanvas.toDataURL('image/png'), 'PNG', pdfMetrics.offsetX + col * (pdfMetrics.labelW + pdfMetrics.gapX), pdfMetrics.offsetY + row * (pdfMetrics.labelH + pdfMetrics.gapY), pdfMetrics.labelW, pdfMetrics.labelH);
+              }
+              numIdx++;
+            }
+          }
+          addPdfPrintNote(pdf, paperW, paperH);
+        }
+        savePdfWithFallback(pdf, '管理番号_' + CONFIG.bNumPrefix + '_' + APP_BUILD_LABEL + '.pdf');
+        return;
+      }
+
+      var canvasW = Math.round(paperW * mmToPx); var canvasH = Math.round(paperH * mmToPx);
+      var scale = mmToPx;
+      var metrics = getAoneLayoutMetrics(preset, scale, getSheetCalibration('bnum'));
+      var oX = metrics.offsetX; var oY = metrics.offsetY;
+      var lW = metrics.labelW; var lH = metrics.labelH;
+      var gX = metrics.gapX; var gY = metrics.gapY;
       var imageUrls = [];
       var numIdx = 0;
       for (var page = 0; page < totalPages; page++) {
-        if (pdf && page > 0) pdf.addPage([paperW, paperH], 'p');
         var off = document.createElement('canvas');
         off.width = canvasW; off.height = canvasH;
         var ctx = off.getContext('2d');
@@ -3919,16 +4055,9 @@
         }
         ctx.font = (3 * scale) + 'px sans-serif'; ctx.fillStyle = '#999';
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.fillText('※100%（実寸）で印刷してください', canvasW / 2, canvasH - 2 * scale);
+        ctx.fillText(getPrintFooterText(), canvasW / 2, canvasH - 2 * scale);
         var pageImage = off.toDataURL('image/png');
         imageUrls.push(pageImage);
-        if (pdf) {
-          pdf.addImage(pageImage, 'PNG', 0, 0, paperW, paperH);
-        }
-      }
-      if (pdf) {
-        savePdfWithFallback(pdf, '管理番号_' + CONFIG.bNumPrefix + '.pdf');
-        return;
       }
       if (openPrintFallback(imageUrls, paperW, paperH, '管理番号ラベル')) {
         return;
@@ -4145,70 +4274,68 @@
     function exportTestPDF() {
       var jsPDF = getJsPdfCtor();
       var sheetId = '31555';
-      var offsetX = 0;
-      var offsetY = 0;
+      var calibrationMode = 'aone';
       if (CONFIG.appMode === 'aone') {
         sheetId = CONFIG.aoneSheet || '31555';
-        offsetX = parseFloat(CONFIG.aoneOffsetX) || 0;
-        offsetY = parseFloat(CONFIG.aoneOffsetY) || 0;
       } else if (CONFIG.appMode === 'bnum') {
         sheetId = CONFIG.bNumSheet || '73200';
-        offsetX = parseFloat(CONFIG.bNumOffsetX) || 0;
-        offsetY = parseFloat(CONFIG.bNumOffsetY) || 0;
+        calibrationMode = 'bnum';
       } else {
         alert('このモードではテスト印刷はできません。');
         return;
       }
       var preset = AONE_PRESETS[sheetId];
       if (!preset) return;
+      var calibration = getSheetCalibration(calibrationMode);
 
       var paperW = preset.paperW;
       var paperH = preset.paperH;
       if (jsPDF) {
-        // jsPDFでmm単位で直接A4を作成
         var pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: [paperW, paperH] });
-
-        var oX = preset.marginLeft + offsetX;
-        var oY = preset.marginTop + offsetY;
-        var lW = preset.labelW;
-        var lH = preset.labelH;
-        var gX = preset.gapX;
-        var gY = preset.gapY;
-
-        pdf.setDrawColor(200, 200, 200); // 薄灰
-        pdf.setLineWidth(0.3);
-        pdf.setFontSize(8);
-        pdf.setTextColor(150, 150, 150);
+        var pdfMetrics = getAoneLayoutMetrics(preset, 1, calibration);
+        var oX = pdfMetrics.offsetX;
+        var oY = pdfMetrics.offsetY;
+        var lW = pdfMetrics.labelW;
+        var lH = pdfMetrics.labelH;
+        var gX = pdfMetrics.gapX;
+        var gY = pdfMetrics.gapY;
 
         for (var row = 0; row < preset.rows; row++) {
           for (var col = 0; col < preset.cols; col++) {
             var x = oX + col * (lW + gX);
             var y = oY + row * (lH + gY);
-            // 枠線
-            pdf.rect(x, y, lW, lH);
-
-            // 十字マーク
-            var cx = x + lW / 2;
-            var cy = y + lH / 2;
-            pdf.setLineWidth(0.1);
-            pdf.line(cx - 2, cy, cx + 2, cy); // 横
-            pdf.line(cx, cy - 2, cx, cy + 2); // 縦
-
-            // R1C1
-            var text = 'R' + (row + 1) + 'C' + (col + 1);
-            pdf.text(text, cx, cy + 3.5, { align: 'center' });
+            var testLabelCanvas = renderPdfLabelCanvas(preset.labelW, preset.labelH, PERFORMANCE.pdfDpi, function (ctx, width, height, scale) {
+              var lineWidth = Math.max(1, 0.3 * scale);
+              var inset = lineWidth / 2;
+              var cx = width / 2;
+              var cy = height / 2;
+              ctx.strokeStyle = '#c8c8c8';
+              ctx.fillStyle = '#999';
+              ctx.lineWidth = lineWidth;
+              ctx.strokeRect(inset, inset, Math.max(1, width - lineWidth), Math.max(1, height - lineWidth));
+              ctx.beginPath();
+              ctx.moveTo(cx - 2 * scale, cy);
+              ctx.lineTo(cx + 2 * scale, cy);
+              ctx.moveTo(cx, cy - 2 * scale);
+              ctx.lineTo(cx, cy + 2 * scale);
+              ctx.stroke();
+              ctx.font = Math.max(10, 8 * scale) + 'px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('R' + (row + 1) + 'C' + (col + 1), cx, cy + 4 * scale);
+            });
+            if (testLabelCanvas) {
+              pdf.addImage(testLabelCanvas.toDataURL('image/png'), 'PNG', x, y, lW, lH);
+            }
           }
         }
 
-        // 注意書き
-        pdf.setFontSize(10);
-        pdf.text('※倍率100%（実際のサイズ）で印刷してください', paperW / 2, paperH - 10, { align: 'center' });
-
-        savePdfWithFallback(pdf, 'テスト印刷_' + sheetId + '.pdf');
+        addPdfPrintNote(pdf, paperW, paperH);
+        savePdfWithFallback(pdf, 'テスト印刷_' + sheetId + '_' + APP_BUILD_LABEL + '.pdf');
         return;
       }
 
-      var dpi = 96;
+      var dpi = PERFORMANCE.pdfDpi;
       var mmToPx = dpi / 25.4;
       var canvasW = Math.round(paperW * mmToPx);
       var canvasH = Math.round(paperH * mmToPx);
@@ -4220,12 +4347,13 @@
       ctx.fillRect(0, 0, canvasW, canvasH);
 
       var scale = mmToPx;
-      var pxOffsetX = (preset.marginLeft + offsetX) * scale;
-      var pxOffsetY = (preset.marginTop + offsetY) * scale;
-      var pxLabelW = preset.labelW * scale;
-      var pxLabelH = preset.labelH * scale;
-      var pxGapX = preset.gapX * scale;
-      var pxGapY = preset.gapY * scale;
+      var canvasMetrics = getAoneLayoutMetrics(preset, scale, calibration);
+      var pxOffsetX = canvasMetrics.offsetX;
+      var pxOffsetY = canvasMetrics.offsetY;
+      var pxLabelW = canvasMetrics.labelW;
+      var pxLabelH = canvasMetrics.labelH;
+      var pxGapX = canvasMetrics.gapX;
+      var pxGapY = canvasMetrics.gapY;
 
       ctx.strokeStyle = '#c8c8c8';
       ctx.fillStyle = '#999';
@@ -4253,7 +4381,7 @@
 
       ctx.font = "".concat(Math.max(12, 10 * scale), "px sans-serif");
       ctx.textBaseline = 'alphabetic';
-      ctx.fillText('※倍率100%（実際のサイズ）で印刷してください', canvasW / 2, canvasH - 10 * scale);
+      ctx.fillText(getPrintFooterText(), canvasW / 2, canvasH - 10 * scale);
       if (openPrintFallback([offscreen.toDataURL('image/png')], paperW, paperH, 'テスト印刷')) {
         return;
       }
@@ -4275,6 +4403,29 @@
       // 高解像度Canvas（300dpi相当）
       var dpi = PERFORMANCE.pdfDpi;
       var mmToPx = dpi / 25.4;
+      var pdfMetrics = getAoneLayoutMetrics(preset, 1, getSheetCalibration('aone'));
+      if (jsPDF) {
+        var pdf = new jsPDF({
+          orientation: 'p',
+          unit: 'mm',
+          format: [paperW, paperH]
+        });
+        var tagCanvas = renderPdfLabelCanvas(preset.labelW, preset.labelH, dpi, function (ctx, width, height, scale) {
+          drawTag(ctx, 0, 0, width, height, scale);
+        });
+        if (tagCanvas) {
+          var tagImage = tagCanvas.toDataURL('image/png');
+          for (var row = 0; row < preset.rows; row++) {
+            for (var col = 0; col < preset.cols; col++) {
+              pdf.addImage(tagImage, 'PNG', pdfMetrics.offsetX + col * (pdfMetrics.labelW + pdfMetrics.gapX), pdfMetrics.offsetY + row * (pdfMetrics.labelH + pdfMetrics.gapY), pdfMetrics.labelW, pdfMetrics.labelH);
+            }
+          }
+        }
+        addPdfPrintNote(pdf, paperW, paperH);
+        savePdfWithFallback(pdf, '値札_AONE_' + CONFIG.aoneSheet + '_' + APP_BUILD_LABEL + '.pdf');
+        return;
+      }
+
       var canvasW = Math.round(paperW * mmToPx);
       var canvasH = Math.round(paperH * mmToPx);
 
@@ -4290,16 +4441,15 @@
       var scale = mmToPx;
 
       // A-ONE固定座標計算
-      var adjX = (CONFIG.aoneOffsetX || 0) * scale;
-      var adjY = (CONFIG.aoneOffsetY || 0) * scale;
-      var offsetX = preset.marginLeft * scale + adjX;
-      var offsetY = preset.marginTop * scale + adjY;
-      var labelW = preset.labelW * scale;
-      var labelH = preset.labelH * scale;
-      var gapX = preset.gapX * scale;
-      var gapY = preset.gapY * scale;
-      var cols = preset.cols;
-      var rows = preset.rows;
+      var metrics = getAoneLayoutMetrics(preset, scale, getSheetCalibration('aone'));
+      var offsetX = metrics.offsetX;
+      var offsetY = metrics.offsetY;
+      var labelW = metrics.labelW;
+      var labelH = metrics.labelH;
+      var gapX = metrics.gapX;
+      var gapY = metrics.gapY;
+      var cols = metrics.cols;
+      var rows = metrics.rows;
 
       // タグスタンプ（パフォーマンス最適化）
       var useTagStamp = LEGACY_MODE || cols * rows > 80;
@@ -4340,16 +4490,6 @@
 
       // PNG形式で出力（文字の滲み防止）
       var imgData = offscreen.toDataURL('image/png');
-      if (jsPDF) {
-        var pdf = new jsPDF({
-          orientation: 'p',
-          unit: 'mm',
-          format: [paperW, paperH]
-        });
-        pdf.addImage(imgData, 'PNG', 0, 0, paperW, paperH);
-        savePdfWithFallback(pdf, '値札_AONE_' + CONFIG.aoneSheet + '.pdf');
-        return;
-      }
       if (openPrintFallback([imgData], paperW, paperH, 'A-ONEラベル')) {
         return;
       }
@@ -4431,6 +4571,8 @@
       document.getElementById('bNumGuide').checked = CONFIG.bNumGuide || false;
       document.getElementById('bNumOffsetX').value = CONFIG.bNumOffsetX || 0;
       document.getElementById('bNumOffsetY').value = CONFIG.bNumOffsetY || 0;
+      document.getElementById('bNumPitchX').value = CONFIG.bNumPitchX || 0;
+      document.getElementById('bNumPitchY').value = CONFIG.bNumPitchY || 0;
       setActiveButton('#bNumSepButtons', '[data-sep="' + (CONFIG.bNumSeparator != null ? CONFIG.bNumSeparator : '-') + '"]');
       setActiveButton('#bNumPadButtons', '[data-pad="' + (CONFIG.bNumZeroPad || 3) + '"]');
       setActiveButton('#bNumSheetSelect', '[data-sheet="' + (CONFIG.bNumSheet || '73200') + '"]');
@@ -4441,6 +4583,8 @@
       document.getElementById('aoneGuide').checked = CONFIG.aoneGuide || false;
       document.getElementById('aoneOffsetX').value = CONFIG.aoneOffsetX || 0;
       document.getElementById('aoneOffsetY').value = CONFIG.aoneOffsetY || 0;
+      document.getElementById('aonePitchX').value = CONFIG.aonePitchX || 0;
+      document.getElementById('aonePitchY').value = CONFIG.aonePitchY || 0;
 
       // カスタムサイズ表示
       if (CONFIG.tagSize === 'custom') {
