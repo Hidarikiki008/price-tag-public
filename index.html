@@ -1073,6 +1073,17 @@
       gap: 16px;
     }
 
+    .calibration-preset-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .calibration-preset-btn {
+      flex: 1;
+      min-width: 120px;
+    }
+
     .offset-group {
       flex: 1;
     }
@@ -1389,6 +1400,14 @@
               <span>📏 ラベル枠ガイド表示</span>
             </label>
           </div>
+          <div class="form-group">
+            <label>🏢 固定補正プリセット</label>
+            <div class="calibration-preset-group" id="aoneCalibrationPresets">
+              <button type="button" class="btn-option calibration-preset-btn" data-preset="default">標準</button>
+              <button type="button" class="btn-option calibration-preset-btn" data-preset="company">会社用</button>
+            </div>
+            <div class="aone-info">💡 会社のプリンターで毎回同じ方向にズレる時は、会社用を押すだけで固定補正を入れられるよ</div>
+          </div>
 
           <div class="form-group">
             <label>🔧 位置微調整 (mm)</label>
@@ -1476,6 +1495,14 @@
             <input type="checkbox" id="bNumGuide">
             <span>📏 ラベル枠ガイド表示</span>
           </label>
+        </div>
+        <div class="form-group">
+          <label>🏢 固定補正プリセット</label>
+          <div class="calibration-preset-group" id="bnumCalibrationPresets">
+            <button type="button" class="btn-option calibration-preset-btn" data-preset="default">標準</button>
+            <button type="button" class="btn-option calibration-preset-btn" data-preset="company">会社用</button>
+          </div>
+          <div class="aone-info">💡 管理番号ラベルも同じ会社プリンターで出すなら、同じ固定補正をワンタッチで入れられるよ</div>
         </div>
         <div class="form-group">
           <label>🔧 位置微調整 (mm)</label>
@@ -1844,6 +1871,103 @@
       pdf.text(text || getPrintFooterText(), paperW / 2, paperH - 10, { align: 'center' });
     }
 
+    var CALIBRATION_PRESETS = {
+      default: {
+        label: '標準',
+        values: { offsetX: 0, offsetY: 0, pitchX: 0, pitchY: 0 }
+      },
+      company: {
+        label: '会社用',
+        values: { offsetX: -1.5, offsetY: -4.0, pitchX: 0.6, pitchY: 0.3 }
+      }
+    };
+    var LEGACY_COMPANY_CALIBRATION_PRESETS = [
+      { offsetX: -2.5, offsetY: -3.5, pitchX: 0, pitchY: 0 },
+      { offsetX: -2.0, offsetY: -4.0, pitchX: 0, pitchY: 0 },
+      { offsetX: -3.0, offsetY: -3.0, pitchX: 0.6, pitchY: 0.7 },
+      { offsetX: -3.0, offsetY: -3.0, pitchX: 0.6, pitchY: 0.6 },
+      { offsetX: -3.0, offsetY: -3.0, pitchX: 0.6, pitchY: 0.4 },
+      { offsetX: -2.5, offsetY: -3.0, pitchX: 0.6, pitchY: 0.4 }
+    ];
+
+    function getCalibrationConfigKeys(mode) {
+      if (mode === 'bnum') {
+        return {
+          offsetX: 'bNumOffsetX',
+          offsetY: 'bNumOffsetY',
+          pitchX: 'bNumPitchX',
+          pitchY: 'bNumPitchY'
+        };
+      }
+      return {
+        offsetX: 'aoneOffsetX',
+        offsetY: 'aoneOffsetY',
+        pitchX: 'aonePitchX',
+        pitchY: 'aonePitchY'
+      };
+    }
+
+    function isCalibrationPresetActive(mode, presetName) {
+      var preset = CALIBRATION_PRESETS[presetName];
+      if (!preset) return false;
+      var keys = getCalibrationConfigKeys(mode);
+      return Math.abs((CONFIG[keys.offsetX] || 0) - preset.values.offsetX) < 0.001 &&
+        Math.abs((CONFIG[keys.offsetY] || 0) - preset.values.offsetY) < 0.001 &&
+        Math.abs((CONFIG[keys.pitchX] || 0) - preset.values.pitchX) < 0.001 &&
+        Math.abs((CONFIG[keys.pitchY] || 0) - preset.values.pitchY) < 0.001;
+    }
+
+    function migrateLegacyCompanyCalibration(mode) {
+      var keys = getCalibrationConfigKeys(mode);
+      var nextPreset = CALIBRATION_PRESETS.company.values;
+      var matchesOldCompanyPreset = LEGACY_COMPANY_CALIBRATION_PRESETS.some(function (oldPreset) {
+        return Math.abs((CONFIG[keys.offsetX] || 0) - oldPreset.offsetX) < 0.001 &&
+          Math.abs((CONFIG[keys.offsetY] || 0) - oldPreset.offsetY) < 0.001 &&
+          Math.abs((CONFIG[keys.pitchX] || 0) - oldPreset.pitchX) < 0.001 &&
+          Math.abs((CONFIG[keys.pitchY] || 0) - oldPreset.pitchY) < 0.001;
+      });
+      if (!matchesOldCompanyPreset) return false;
+      CONFIG[keys.offsetX] = nextPreset.offsetX;
+      CONFIG[keys.offsetY] = nextPreset.offsetY;
+      CONFIG[keys.pitchX] = nextPreset.pitchX;
+      CONFIG[keys.pitchY] = nextPreset.pitchY;
+      return true;
+    }
+
+    function refreshCalibrationPresetButtons() {
+      [
+        { mode: 'aone', container: '#aoneCalibrationPresets' },
+        { mode: 'bnum', container: '#bnumCalibrationPresets' }
+      ].forEach(function (entry) {
+        document.querySelectorAll(entry.container + ' [data-preset]').forEach(function (btn) {
+          var presetName = getDataAttr(btn, 'preset');
+          btn.classList.toggle('active', isCalibrationPresetActive(entry.mode, presetName));
+        });
+      });
+    }
+
+    function syncCalibrationInputs(mode) {
+      var keys = getCalibrationConfigKeys(mode);
+      document.getElementById(keys.offsetX).value = CONFIG[keys.offsetX] || 0;
+      document.getElementById(keys.offsetY).value = CONFIG[keys.offsetY] || 0;
+      document.getElementById(keys.pitchX).value = CONFIG[keys.pitchX] || 0;
+      document.getElementById(keys.pitchY).value = CONFIG[keys.pitchY] || 0;
+      refreshCalibrationPresetButtons();
+    }
+
+    function applyCalibrationPreset(mode, presetName) {
+      var preset = CALIBRATION_PRESETS[presetName];
+      if (!preset) return;
+      var keys = getCalibrationConfigKeys(mode);
+      CONFIG[keys.offsetX] = preset.values.offsetX;
+      CONFIG[keys.offsetY] = preset.values.offsetY;
+      CONFIG[keys.pitchX] = preset.values.pitchX;
+      CONFIG[keys.pitchY] = preset.values.pitchY;
+      syncCalibrationInputs(mode);
+      saveSettings();
+      updatePreview();
+    }
+
     // カラーマップ
     var COLORS = {
       pink: {
@@ -1970,7 +2094,7 @@
       pdfDpi: LEGACY_MODE ? 96 : 300,
       imageQuality: LEGACY_MODE ? 0.76 : 0.95
     };
-    var APP_BUILD_LABEL = '2026-04-07-cal-aone';
+    var APP_BUILD_LABEL = '2026-07-08-company-cal';
     var schedulePreviewFrame = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : function (callback) {
       return setTimeout(callback, 16);
     };
@@ -2445,6 +2569,230 @@
         return hex.length === 1 ? '0' + hex : hex;
       }).join(''));
     }
+    function normalizeStableEmojiKey(emoji) {
+      return String(emoji || '').trim().replace(/\uFE0F/g, '');
+    }
+    function getStableEmojiPalette(baseColor) {
+      var base = String(baseColor || '#d96d95');
+      return {
+        stroke: blendHexColor(base, '#000000', 0.38),
+        fill: blendHexColor(base, '#ffffff', 0.28),
+        accent: base,
+        accentSoft: blendHexColor(base, '#ffffff', 0.42),
+        bark: '#7f5a3a'
+      };
+    }
+    function withSquareGlyphTransform(ctx, centerX, centerY, size, drawFn) {
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.scale(size / 2, size / 2);
+      drawFn();
+      ctx.restore();
+    }
+    function drawStableSakuraGlyph(ctx, centerX, centerY, size, palette) {
+      withSquareGlyphTransform(ctx, centerX, centerY, size, function () {
+        ctx.fillStyle = palette.fill;
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 0.12;
+        for (var i = 0; i < 5; i++) {
+          var angle = -Math.PI / 2 + i * (Math.PI * 2 / 5);
+          var px = Math.cos(angle) * 0.48;
+          var py = Math.sin(angle) * 0.48;
+          ctx.beginPath();
+          ctx.ellipse(px, py, 0.34, 0.28, angle, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.fillStyle = palette.accentSoft;
+        ctx.beginPath();
+        ctx.arc(0, 0, 0.22, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    function drawStableSunflowerGlyph(ctx, centerX, centerY, size, palette) {
+      withSquareGlyphTransform(ctx, centerX, centerY, size, function () {
+        ctx.fillStyle = palette.fill;
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 0.1;
+        for (var i = 0; i < 12; i++) {
+          var angle = i * (Math.PI * 2 / 12);
+          ctx.save();
+          ctx.rotate(angle);
+          ctx.beginPath();
+          ctx.ellipse(0, -0.62, 0.16, 0.34, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.fillStyle = blendHexColor(palette.accent, '#7a4b00', 0.48);
+        ctx.beginPath();
+        ctx.arc(0, 0, 0.36, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = palette.stroke;
+        ctx.stroke();
+      });
+    }
+    function drawStableMapleGlyph(ctx, centerX, centerY, size, palette) {
+      withSquareGlyphTransform(ctx, centerX, centerY, size, function () {
+        ctx.fillStyle = palette.fill;
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 0.1;
+        ctx.beginPath();
+        ctx.moveTo(0, -0.95);
+        ctx.lineTo(0.16, -0.46);
+        ctx.lineTo(0.54, -0.66);
+        ctx.lineTo(0.36, -0.18);
+        ctx.lineTo(0.84, 0.02);
+        ctx.lineTo(0.28, 0.12);
+        ctx.lineTo(0.42, 0.68);
+        ctx.lineTo(0, 0.4);
+        ctx.lineTo(-0.42, 0.68);
+        ctx.lineTo(-0.28, 0.12);
+        ctx.lineTo(-0.84, 0.02);
+        ctx.lineTo(-0.36, -0.18);
+        ctx.lineTo(-0.54, -0.66);
+        ctx.lineTo(-0.16, -0.46);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = palette.bark;
+        ctx.lineWidth = 0.12;
+        ctx.beginPath();
+        ctx.moveTo(0, 0.34);
+        ctx.lineTo(0, 1.02);
+        ctx.stroke();
+      });
+    }
+    function drawStableSnowflakeGlyph(ctx, centerX, centerY, size, palette) {
+      withSquareGlyphTransform(ctx, centerX, centerY, size, function () {
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 0.14;
+        ctx.lineCap = 'round';
+        for (var i = 0; i < 6; i++) {
+          var angle = i * (Math.PI / 3);
+          var ux = Math.cos(angle);
+          var uy = Math.sin(angle);
+          ctx.beginPath();
+          ctx.moveTo(-ux * 0.12, -uy * 0.12);
+          ctx.lineTo(ux * 0.92, uy * 0.92);
+          ctx.stroke();
+          var bx = ux * 0.44;
+          var by = uy * 0.44;
+          var branchA = angle + Math.PI * 0.72;
+          var branchB = angle - Math.PI * 0.72;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + Math.cos(branchA) * 0.26, by + Math.sin(branchA) * 0.26);
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + Math.cos(branchB) * 0.26, by + Math.sin(branchB) * 0.26);
+          ctx.stroke();
+        }
+      });
+    }
+    function drawStableTreeGlyph(ctx, centerX, centerY, size, palette) {
+      withSquareGlyphTransform(ctx, centerX, centerY, size, function () {
+        ctx.fillStyle = palette.fill;
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 0.1;
+        var tiers = [
+          { top: -0.95, width: 0.94, bottom: -0.38 },
+          { top: -0.55, width: 0.74, bottom: 0.02 },
+          { top: -0.16, width: 0.54, bottom: 0.38 }
+        ];
+        tiers.forEach(function (tier) {
+          ctx.beginPath();
+          ctx.moveTo(0, tier.top);
+          ctx.lineTo(tier.width / 2, tier.bottom);
+          ctx.lineTo(-tier.width / 2, tier.bottom);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        });
+        ctx.fillStyle = palette.bark;
+        ctx.fillRect(-0.12, 0.38, 0.24, 0.46);
+      });
+    }
+    function drawStableHeartGlyph(ctx, centerX, centerY, size, palette) {
+      withSquareGlyphTransform(ctx, centerX, centerY, size, function () {
+        ctx.fillStyle = palette.fill;
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 0.11;
+        ctx.beginPath();
+        ctx.moveTo(0, 0.82);
+        ctx.bezierCurveTo(0.74, 0.28, 0.96, -0.12, 0.5, -0.48);
+        ctx.bezierCurveTo(0.2, -0.72, -0.04, -0.46, 0, -0.16);
+        ctx.bezierCurveTo(0.04, -0.46, -0.2, -0.72, -0.5, -0.48);
+        ctx.bezierCurveTo(-0.96, -0.12, -0.74, 0.28, 0, 0.82);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+    function drawStablePumpkinGlyph(ctx, centerX, centerY, size, palette) {
+      withSquareGlyphTransform(ctx, centerX, centerY, size, function () {
+        ctx.fillStyle = palette.fill;
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 0.1;
+        [-0.38, -0.14, 0.14, 0.38].forEach(function (dx, index) {
+          ctx.beginPath();
+          ctx.ellipse(dx, 0.12, index === 1 || index === 2 ? 0.36 : 0.28, 0.46, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        });
+        ctx.strokeStyle = palette.bark;
+        ctx.lineWidth = 0.12;
+        ctx.beginPath();
+        ctx.moveTo(0, -0.36);
+        ctx.quadraticCurveTo(0.1, -0.74, 0.22, -0.7);
+        ctx.stroke();
+      });
+    }
+    function hasStableEmojiGlyph(emoji) {
+      var key = normalizeStableEmojiKey(emoji);
+      return key === '🌸' || key === '🌻' || key === '🍁' || key === '❄' || key === '🎄' || key === '💝' || key === '🎃';
+    }
+    function drawStableEmojiGlyph(ctx, emoji, centerX, centerY, size) {
+      var key = normalizeStableEmojiKey(emoji);
+      if (!key) return false;
+      var palette = getStableEmojiPalette(ctx.fillStyle);
+      if (key === '🌸') {
+        drawStableSakuraGlyph(ctx, centerX, centerY, size, palette);
+        return true;
+      }
+      if (key === '🌻') {
+        drawStableSunflowerGlyph(ctx, centerX, centerY, size, palette);
+        return true;
+      }
+      if (key === '🍁') {
+        drawStableMapleGlyph(ctx, centerX, centerY, size, palette);
+        return true;
+      }
+      if (key === '❄') {
+        drawStableSnowflakeGlyph(ctx, centerX, centerY, size, palette);
+        return true;
+      }
+      if (key === '🎄') {
+        drawStableTreeGlyph(ctx, centerX, centerY, size, palette);
+        return true;
+      }
+      if (key === '💝') {
+        drawStableHeartGlyph(ctx, centerX, centerY, size, palette);
+        return true;
+      }
+      if (key === '🎃') {
+        drawStablePumpkinGlyph(ctx, centerX, centerY, size, palette);
+        return true;
+      }
+      return false;
+    }
+    function measureEmojiGlyphWidth(ctx, emoji, size) {
+      if (hasStableEmojiGlyph(emoji)) {
+        return size * 0.92;
+      }
+      ctx.font = "".concat(size, "px ").concat(EMOJI_FONT_FAMILY);
+      var rawIconWidth = ctx.measureText(emoji).width;
+      return Math.min(size * 1.2, Math.max(size * 0.7, rawIconWidth));
+    }
     function getEmojiSpriteCanvas(emoji) {
       var key = String(emoji || '');
       if (!key) return null;
@@ -2503,6 +2851,10 @@
       if (typeof alpha === 'number') {
         ctx.globalAlpha = ctx.globalAlpha * alpha;
       }
+      if (drawStableEmojiGlyph(ctx, emoji, centerX, centerY, size)) {
+        ctx.restore();
+        return;
+      }
       if (LEGACY_MODE) {
         var spriteInfo = getEmojiSpriteCanvas(emoji);
         if (spriteInfo && spriteInfo.usable) {
@@ -2547,9 +2899,7 @@
       var iconFontSize = estimateIconFontSize(mainFontSize, tagHeightPx, tagWidthPx);
       var iconGap = estimateIconGap(mainFontSize, tagHeightPx);
       var textWidth = ctx.measureText(mainText).width;
-      ctx.font = "".concat(iconFontSize, "px ").concat(EMOJI_FONT_FAMILY);
-      var rawIconWidth = ctx.measureText(iconGlyph).width;
-      var iconWidth = Math.min(iconFontSize * 1.2, Math.max(iconFontSize * 0.7, rawIconWidth));
+      var iconWidth = measureEmojiGlyphWidth(ctx, iconGlyph, iconFontSize);
       var totalWidth = placement === 'both' ? iconWidth + iconGap + textWidth + iconGap + iconWidth : iconWidth + iconGap + textWidth;
       if (contentMaxWidth && totalWidth > contentMaxWidth) {
         var fitRatio = Math.max(0.9, contentMaxWidth / totalWidth);
@@ -2557,9 +2907,7 @@
         if (tagWidthPx && tagHeightPx / tagWidthPx >= 0.7) { iconMinFloor *= 0.35; }
         iconFontSize = Math.max(iconMinFloor, iconFontSize * fitRatio);
         iconGap = Math.max(tagHeightPx * 0.03, iconGap * fitRatio);
-        ctx.font = "".concat(iconFontSize, "px ").concat(EMOJI_FONT_FAMILY);
-        rawIconWidth = ctx.measureText(iconGlyph).width;
-        iconWidth = Math.min(iconFontSize * 1.2, Math.max(iconFontSize * 0.68, rawIconWidth));
+        iconWidth = measureEmojiGlyphWidth(ctx, iconGlyph, iconFontSize);
         totalWidth = placement === 'both' ? iconWidth + iconGap + textWidth + iconGap + iconWidth : iconWidth + iconGap + textWidth;
       }
       var textCenter = centerX;
@@ -3009,6 +3357,11 @@
         saveSettings();
         updatePreview();
       });
+      document.querySelectorAll('#aoneCalibrationPresets [data-preset]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          applyCalibrationPreset('aone', getDataAttr(btn, 'preset'));
+        });
+      });
       // A-ONE微調整
       ['aoneOffsetX', 'aoneOffsetY'].forEach(function (id) {
         document.getElementById(id).addEventListener('input', function (e) {
@@ -3017,6 +3370,7 @@
             e.target.value = CONFIG[id];
           }
           saveSettings();
+          refreshCalibrationPresetButtons();
           updatePreview();
         });
       });
@@ -3027,6 +3381,7 @@
             e.target.value = CONFIG[id];
           }
           saveSettings();
+          refreshCalibrationPresetButtons();
           updatePreview();
         });
       });
@@ -3069,13 +3424,18 @@
         });
       });
       document.getElementById('bNumGuide').addEventListener('change', function (e) { CONFIG.bNumGuide = !!e.target.checked; saveSettings(); updatePreview(); });
+      document.querySelectorAll('#bnumCalibrationPresets [data-preset]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          applyCalibrationPreset('bnum', getDataAttr(btn, 'preset'));
+        });
+      });
       ['bNumOffsetX', 'bNumOffsetY'].forEach(function (id) {
         document.getElementById(id).addEventListener('input', function (e) {
           CONFIG[id] = sanitizeFloat(e.target.value, INPUT_LIMITS.bnumOffset.min, INPUT_LIMITS.bnumOffset.max, INPUT_LIMITS.bnumOffset.fallback);
           if (String(e.target.value) !== String(CONFIG[id])) {
             e.target.value = CONFIG[id];
           }
-          saveSettings(); updatePreview();
+          saveSettings(); refreshCalibrationPresetButtons(); updatePreview();
         });
       });
       ['bNumPitchX', 'bNumPitchY'].forEach(function (id) {
@@ -3084,7 +3444,7 @@
           if (String(e.target.value) !== String(CONFIG[id])) {
             e.target.value = CONFIG[id];
           }
-          saveSettings(); updatePreview();
+          saveSettings(); refreshCalibrationPresetButtons(); updatePreview();
         });
       });
     }
@@ -4028,7 +4388,6 @@
               numIdx++;
             }
           }
-          addPdfPrintNote(pdf, paperW, paperH);
         }
         savePdfWithFallback(pdf, '管理番号_' + CONFIG.bNumPrefix + '_' + APP_BUILD_LABEL + '.pdf');
         return;
@@ -4053,9 +4412,6 @@
             numIdx++;
           }
         }
-        ctx.font = (3 * scale) + 'px sans-serif'; ctx.fillStyle = '#999';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.fillText(getPrintFooterText(), canvasW / 2, canvasH - 2 * scale);
         var pageImage = off.toDataURL('image/png');
         imageUrls.push(pageImage);
       }
@@ -4330,7 +4686,6 @@
           }
         }
 
-        addPdfPrintNote(pdf, paperW, paperH);
         savePdfWithFallback(pdf, 'テスト印刷_' + sheetId + '_' + APP_BUILD_LABEL + '.pdf');
         return;
       }
@@ -4379,9 +4734,6 @@
         }
       }
 
-      ctx.font = "".concat(Math.max(12, 10 * scale), "px sans-serif");
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(getPrintFooterText(), canvasW / 2, canvasH - 10 * scale);
       if (openPrintFallback([offscreen.toDataURL('image/png')], paperW, paperH, 'テスト印刷')) {
         return;
       }
@@ -4421,7 +4773,6 @@
             }
           }
         }
-        addPdfPrintNote(pdf, paperW, paperH);
         savePdfWithFallback(pdf, '値札_AONE_' + CONFIG.aoneSheet + '_' + APP_BUILD_LABEL + '.pdf');
         return;
       }
@@ -4533,6 +4884,9 @@
         }
       }
       sanitizeConfigInPlace();
+      var migratedAoneCalibration = migrateLegacyCompanyCalibration('aone');
+      var migratedBnumCalibration = migrateLegacyCompanyCalibration('bnum');
+      var migratedCalibration = migratedAoneCalibration || migratedBnumCalibration;
 
       // UIに反映
       document.getElementById('price').value = CONFIG.price;
@@ -4585,6 +4939,7 @@
       document.getElementById('aoneOffsetY').value = CONFIG.aoneOffsetY || 0;
       document.getElementById('aonePitchX').value = CONFIG.aonePitchX || 0;
       document.getElementById('aonePitchY').value = CONFIG.aonePitchY || 0;
+      refreshCalibrationPresetButtons();
 
       // カスタムサイズ表示
       if (CONFIG.tagSize === 'custom') {
@@ -4607,7 +4962,7 @@
       updateModeUI();
 
       // 旧データをサニタイズ済み形式へ移行
-      if (saved !== null) {
+      if (saved !== null || migratedCalibration) {
         try {
           localStorage.setItem('toketeru-settings', JSON.stringify(buildPersistedConfig()));
         } catch (e) { }
