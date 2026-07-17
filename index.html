@@ -26,6 +26,11 @@
       --color-mint: #a8e6cf;
       --color-lavender: #d4b3ff;
       --color-lemon: #fff59d;
+      --color-sky: #9ed8ff;
+      --color-peach: #ffc4a3;
+      --color-lime: #c9f27c;
+      --color-coral: #ff8a80;
+      --color-kraft: #d7b899;
       --color-mono: #e0e0e0;
       --color-simple: #ffffff;
     }
@@ -145,10 +150,14 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin: 0;
-      padding: 0;
-      border: none;
+      margin: 18px 0 16px;
+      padding: 0 0 8px;
+      border-bottom: 2px solid var(--border);
       flex: 1;
+    }
+
+    .settings h2:first-of-type {
+      margin-top: 0;
     }
 
     .settings details {
@@ -1193,9 +1202,6 @@
           </div>
         </div>
         <div class="guide-status" id="guideStatus" aria-live="polite">次は価格を入れるだけでOKだよ。</div>
-        <div class="guide-actions">
-          <button type="button" class="ghost-btn" id="toggleAdvancedBtn">詳細設定を全部開く</button>
-        </div>
       </div>
 
       <!-- 値札/A-ONE共通コンテンツ -->
@@ -1554,6 +1560,16 @@
             <div class="color-swatch" data-color="lavender" style="background: var(--color-lavender);" title="ラベンダー">
             </div>
             <div class="color-swatch" data-color="lemon" style="background: var(--color-lemon);" title="レモン">
+            </div>
+            <div class="color-swatch" data-color="sky" style="background: var(--color-sky);" title="空色">
+            </div>
+            <div class="color-swatch" data-color="peach" style="background: var(--color-peach);" title="ピーチ">
+            </div>
+            <div class="color-swatch" data-color="lime" style="background: var(--color-lime);" title="黄緑">
+            </div>
+            <div class="color-swatch" data-color="coral" style="background: var(--color-coral);" title="コーラル">
+            </div>
+            <div class="color-swatch" data-color="kraft" style="background: var(--color-kraft);" title="クラフト">
             </div>
             <div class="color-swatch" data-color="mono" style="background: var(--color-mono);" title="モノクロ">
             </div>
@@ -1994,6 +2010,36 @@
         border: '#ffeb3b',
         text: '#333'
       },
+      sky: {
+        bg: '#9ed8ff',
+        bg2: '#e4f5ff',
+        border: '#36a9e8',
+        text: '#243447'
+      },
+      peach: {
+        bg: '#ffc4a3',
+        bg2: '#fff0e8',
+        border: '#ff8a50',
+        text: '#3a2a20'
+      },
+      lime: {
+        bg: '#c9f27c',
+        bg2: '#f0ffd6',
+        border: '#8bc34a',
+        text: '#26331d'
+      },
+      coral: {
+        bg: '#ff8a80',
+        bg2: '#ffe5e2',
+        border: '#e95b50',
+        text: '#321f1d'
+      },
+      kraft: {
+        bg: '#d7b899',
+        bg2: '#f4e7d8',
+        border: '#a77b50',
+        text: '#33251a'
+      },
       mono: {
         bg: '#e0e0e0',
         bg2: '#f5f5f5',
@@ -2094,7 +2140,7 @@
       pdfDpi: LEGACY_MODE ? 96 : 300,
       imageQuality: LEGACY_MODE ? 0.76 : 0.95
     };
-    var APP_BUILD_LABEL = '2026-07-08-company-cal';
+    var APP_BUILD_LABEL = '2026-07-16-colors-open-menu';
     var schedulePreviewFrame = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : function (callback) {
       return setTimeout(callback, 16);
     };
@@ -2129,7 +2175,7 @@
       tagSize: ['xs', 's', 'm', 'l', 'xl', 'custom'],
       paper: ['a4', 'a5', 'b5', 'letter', 'custom'],
       orientation: ['portrait', 'landscape'],
-      color: ['pink', 'mint', 'lavender', 'lemon', 'mono', 'simple'],
+      color: ['pink', 'mint', 'lavender', 'lemon', 'sky', 'peach', 'lime', 'coral', 'kraft', 'mono', 'simple'],
       template: ['point', 'band', 'simple', 'ribbon', 'scallop', 'double', 'ticket', 'corner', 'botanical'],
       taxDisplay: ['none', 'included', 'excluded'],
       cornerRadius: ['none', 'soft', 'round'],
@@ -2950,51 +2996,7 @@
       }
       updateZoomPreviewVisibility();
 
-      // --- スマホ対応：設定パネルのアコーディオン化 ---
-      var h2Elements = document.querySelectorAll('.settings h2');
-      h2Elements.forEach(function (h2) {
-        var details = document.createElement('details');
-        details.open = true; // デフォルトは開いておく
-        var summary = document.createElement('summary');
-        var status = document.createElement('span');
-        status.className = 'summary-status is-empty';
-        status.textContent = '未設定';
-
-        h2.parentNode.insertBefore(details, h2);
-        summary.appendChild(h2);
-        summary.appendChild(status);
-        details.appendChild(summary);
-
-        var current = details.nextElementSibling;
-        while (current) {
-          if (current.tagName === 'H2' || current.classList.contains('section-divider')) {
-            break;
-          }
-          var next = current.nextElementSibling;
-          details.appendChild(current);
-          current = next;
-        }
-        if (!DETAILS_NATIVE_SUPPORT) {
-          summary.addEventListener('click', function (event) {
-            event.preventDefault();
-            details.open = !details.open;
-            applyDetailOpenState(details);
-          });
-          applyDetailOpenState(details);
-        }
-      });
-
-      // スマホの幅になったらデフォルトを閉じるようにする
-      if (window.innerWidth <= 768) {
-        document.querySelectorAll('.settings details').forEach(function (d) {
-          d.open = false;
-          applyDetailOpenState(d);
-        });
-      }
-      // ----------------------------------------
-
       loadSettings();
-      applyRecommendedDetailsState();
       setupEventListeners();
       refreshGuideUI();
       updatePreview();
@@ -3210,6 +3212,9 @@
           });
           swatch.classList.add('active');
           CONFIG.color = getDataAttr(swatch, 'color');
+          // 通常カラーを選んだときは、色を上書きする季節テーマを解除する。
+          CONFIG.seasonTheme = 'none';
+          setActiveButton('#seasonTheme', '[data-season="none"]');
           saveSettings();
           updatePreview();
         });
